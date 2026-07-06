@@ -22,6 +22,11 @@ def ist_timestamp():
     return datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
 
 
+def ist_compact():
+    """Compact IST stamp for worksheet names, e.g. '20260707_011846'."""
+    return datetime.now(IST).strftime("%Y%m%d_%H%M%S")
+
+
 REFERENCE_DATE = "2026-04-06"   # all age / recency math anchors here
 SCORE_MIN      = 300            # Experian V3 floor
 SCORE_MAX      = 900            # Experian V3 ceiling

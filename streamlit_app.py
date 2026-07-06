@@ -226,25 +226,43 @@ if st.button("Submit data request", type="primary"):
             st.markdown(f"- {e}")
     else:
         tvals = mappings.to_template_values(answers)
-        header = (
-            ["submitted_at", "requested_by", "recipient_contact",
-             "recipient_email", "recipient_pan", "recipient_gst"]
-            + mappings.TEMPLATE_FIELDS
-            + ["extra_output_columns", "notes"]
-        )
-        row = (
-            [mappings.ist_timestamp(), user_email, recipient_contact,
-             recipient_email, recipient_pan, recipient_gst]
-            + [tvals[f] for f in mappings.TEMPLATE_FIELDS]
-            + [extra_columns, notes]
-        )
+        ts = mappings.ist_timestamp()
+
+        # Field|Value pairs for the per-request worksheet (and, transposed, the log)
+        meta_pairs = [
+            ("submitted_at", ts),
+            ("requested_by", user_email),
+            ("recipient_contact", recipient_contact),
+            ("recipient_email", recipient_email),
+            ("recipient_pan", recipient_pan),
+            ("recipient_gst", recipient_gst),
+        ]
+        template_pairs = [(f, tvals[f]) for f in mappings.TEMPLATE_FIELDS]
+        tail_pairs = [("extra_output_columns", extra_columns), ("notes", notes)]
+        pairs = meta_pairs + template_pairs + tail_pairs
+
+        request_title = f"{user_email} — {recipient_name} — {ts}"
         try:
-            storage.append_submission(header, row)
+            fname, furl = storage.create_request_workbook(request_title, pairs)
+            header = (
+                ["submitted_at", "requested_by", "request_file", "request_url",
+                 "recipient_contact", "recipient_email", "recipient_pan", "recipient_gst"]
+                + mappings.TEMPLATE_FIELDS
+                + ["extra_output_columns", "notes"]
+            )
+            row = (
+                [ts, user_email, fname, furl, recipient_contact, recipient_email,
+                 recipient_pan, recipient_gst]
+                + [tvals[f] for f in mappings.TEMPLATE_FIELDS]
+                + [extra_columns, notes]
+            )
+            storage.append_master(header, row)
         except Exception as exc:
             st.error(f"Save failed: {type(exc).__name__}: {exc!r}")
             st.exception(exc)
         else:
             st.success(f"✅ Request submitted and recorded against **{user_email}**.")
+            st.markdown(f"📄 Request workbook: **[{fname}]({furl})**")
             st.balloons()
             tsv = "\t".join(tvals[f] for f in mappings.TEMPLATE_FIELDS)
             with st.expander("Campaign-template row (for the data team)"):
