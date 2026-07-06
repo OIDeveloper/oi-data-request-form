@@ -8,7 +8,7 @@ tagged with the verified requester's email.
 
 import pandas as pd
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
 
 import mappings
 import storage
@@ -126,7 +126,7 @@ if st.session_state.page == "landing":
 
     # --- AG Grid: native pagination, page-size selector, sort/filter/resize ---
     gb = GridOptionsBuilder.from_dataframe(df)
-    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_default_column(editable=False, sortable=True, filter=False, resizable=True)
     gb.configure_pagination(
         enabled=True, paginationAutoPageSize=False, paginationPageSize=10
     )
@@ -148,6 +148,7 @@ if st.session_state.page == "landing":
         height=470,
         allow_unsafe_jscode=True,
         fit_columns_on_grid_load=False,
+        columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
         enable_enterprise_modules=False,
     )
     st.stop()
