@@ -110,7 +110,11 @@ if storage.storage_configured():
             storage.append_row([ts, user_email, "test submission"])
             st.success("✅ Wrote a test row — check the Google Sheet.")
         except Exception as exc:
-            st.error(f"Write failed: {exc}")
+            st.error(f"Write failed: {type(exc).__name__}: {exc!r}")
+            sa = storage.service_account_email()
+            if sa:
+                st.caption(f"Service account the sheet must be shared with: {sa}")
+            st.exception(exc)
 else:
     st.info(
         "Google Sheet not configured yet — add the `[sheets]` and "
