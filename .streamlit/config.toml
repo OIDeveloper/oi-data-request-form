@@ -5,6 +5,10 @@
 primaryColor = "#2563eb"
 base = "light"
 
+[client]
+# Hide the top-right app toolbar/menu for all visitors (sales users).
+toolbarMode = "minimal"
+
 [server]
 # Keep uploaded-data limits small; this app takes no file uploads.
 maxUploadSize = 5
