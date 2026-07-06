@@ -8,7 +8,7 @@ tagged with the verified requester's email.
 
 import pandas as pd
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+from st_aggrid import AgGrid, GridOptionsBuilder
 
 import mappings
 import storage
@@ -123,6 +123,9 @@ if st.session_state.page == "landing":
     # keep only columns this user actually filled (the data points they requested)
     non_empty = df.astype(str).apply(lambda col: col.str.strip().ne("").any())
     df = df.loc[:, non_empty]
+    # Drop the workbook LINK (shared-drive, data-team only — requester may lack
+    # access). Keep request_file (just a name) so the requester can trace their request.
+    df = df.drop(columns=["request_url"], errors="ignore")
 
     # --- AG Grid: native pagination, page-size selector, sort/filter/resize ---
     gb = GridOptionsBuilder.from_dataframe(df)
@@ -130,14 +133,6 @@ if st.session_state.page == "landing":
     gb.configure_pagination(
         enabled=True, paginationAutoPageSize=False, paginationPageSize=10
     )
-    if "request_url" in df.columns:
-        link_renderer = JsCode("""
-            function(params){
-                if(!params.value) return '';
-                return `<a href="${params.value}" target="_blank">Open</a>`;
-            }
-        """)
-        gb.configure_column("request_url", headerName="Workbook", cellRenderer=link_renderer)
     grid_options = gb.build()
     grid_options["paginationPageSizeSelector"] = [10, 25, 50]
     # Size every column to its content at init (AG Grid v31+ native strategy).
