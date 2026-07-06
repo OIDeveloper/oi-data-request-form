@@ -72,6 +72,47 @@ def read_all_requests():
     return ws.get_all_records()
 
 
+def _spreadsheet_id_from_url(url):
+    m = re.search(r"/d/([A-Za-z0-9_-]+)", url or "")
+    return m.group(1) if m else None
+
+
+def delete_requests(urls):
+    """Delete each request's workbook file AND its master-log row.
+
+    A master row is removed only if its file was deleted (or already gone), so a
+    file is never orphaned. Deleting a file needs the service account to be
+    'Content Manager' on the shared drive (Contributor can't delete).
+    Returns (deleted_count, errors).
+    """
+    client = _client()
+    ok, errors = [], []
+    for url in urls:
+        fid = _spreadsheet_id_from_url(url)
+        if not fid:
+            errors.append(f"Couldn't parse workbook id from: {url}")
+            continue
+        try:
+            client.del_spreadsheet(fid)
+            ok.append(url)
+        except Exception as exc:
+            msg = str(exc)
+            if "404" in msg or "notfound" in msg.lower():
+                ok.append(url)          # already gone — still clean up the row
+            else:
+                errors.append(f"{url}: {msg}")
+    if ok:
+        ws = client.open_by_key(st.secrets["sheets"]["id"]).sheet1
+        values = ws.get_all_values()
+        if values and "request_url" in values[0]:
+            uc = values[0].index("request_url")
+            rows = [i + 1 for i, row in enumerate(values)
+                    if i >= 1 and len(row) > uc and row[uc] in ok]
+            for r in sorted(rows, reverse=True):   # delete bottom-up
+                ws.delete_rows(r)
+    return len(ok), errors
+
+
 def _safe_filename(name):
     name = re.sub(r"[\r\n/\\]", " ", name or "").strip()
     return (name or "OI Data Request")[:120]

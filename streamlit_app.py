@@ -8,7 +8,7 @@ tagged with the verified requester's email.
 
 import pandas as pd
 import streamlit as st
-from st_aggrid import AgGrid, GridOptionsBuilder
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
 import mappings
 import storage
@@ -40,6 +40,20 @@ def allowed_emails():
     return [str(e).strip().lower() for e in raw]
 
 
+def admin_emails():
+    """Emails allowed into the admin cleanup page. Defaults to the developer id."""
+    default = ["developer@oneinfinity.in"]
+    try:
+        raw = st.secrets["admin_emails"]
+    except Exception:
+        return default
+    if isinstance(raw, str):
+        lst = [e.strip().lower() for e in raw.split(",") if e.strip()]
+    else:
+        lst = [str(e).strip().lower() for e in raw]
+    return lst or default
+
+
 # ── Auth gate ────────────────────────────────────────────────────────────────
 def require_login():
     if not _auth_configured():
@@ -69,6 +83,7 @@ def require_login():
 
 
 user_email = require_login()
+is_admin = user_email in admin_emails()
 
 # Logo only after a successful, authorised login (require_login stops before here).
 st.logo("assets/oneflo-logo.png", size="large")
@@ -85,6 +100,11 @@ with st.sidebar:
     st.write(f"**{st.user.get('name', user_email)}**")
     st.write(user_email)
     st.button("Sign out", on_click=st.logout, use_container_width=True)
+    if is_admin:
+        st.divider()
+        if st.button("🧹 Admin cleanup", use_container_width=True):
+            st.session_state.page = "admin"
+            st.rerun()
 
 # ── Form version (bumping it gives every widget a fresh key = blank form) ────
 if "form_ver" not in st.session_state:
@@ -94,6 +114,73 @@ V = st.session_state.form_ver
 # ── Page routing ─────────────────────────────────────────────────────────────
 if "page" not in st.session_state:
     st.session_state.page = "landing"
+
+if st.session_state.page == "admin":
+    if not is_admin:
+        st.session_state.page = "landing"
+        st.rerun()
+    ah_l, ah_r = st.columns([3, 2])
+    ah_l.title("🧹 Admin — Clean up requests")
+    if ah_r.button("← Back to my requests", use_container_width=True):
+        st.session_state.page = "landing"
+        st.rerun()
+
+    if "admin_result" in st.session_state:
+        n_done, errs = st.session_state.pop("admin_result")
+        st.success(f"Deleted {n_done} request(s).")
+        for e in errs:
+            st.error(e)
+
+    st.warning(
+        "Deleting a request permanently removes its workbook file **and** its row "
+        "in the master log. This cannot be undone."
+    )
+
+    try:
+        records = storage.read_all_requests()
+    except Exception as exc:
+        st.error(f"Couldn't load requests: {type(exc).__name__}: {exc!r}")
+        records = []
+    if not records:
+        st.info("No requests to clean up.")
+        st.stop()
+
+    adf = pd.DataFrame(records)
+    if "submitted_at" in adf.columns:
+        adf = adf.sort_values("submitted_at", ascending=False)
+
+    gb = GridOptionsBuilder.from_dataframe(adf)
+    gb.configure_default_column(editable=False, sortable=True, filter=False, resizable=True)
+    gb.configure_selection("multiple", use_checkbox=True, header_checkbox=True)
+    gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=25)
+    gopts = gb.build()
+    gopts["paginationPageSizeSelector"] = [10, 25, 50]
+    gopts["autoSizeStrategy"] = {"type": "fitCellContents"}
+    grid = AgGrid(
+        adf, gridOptions=gopts, theme="alpine", height=470,
+        allow_unsafe_jscode=True, fit_columns_on_grid_load=False,
+        enable_enterprise_modules=False, update_mode=GridUpdateMode.SELECTION_CHANGED,
+    )
+
+    try:
+        sel = grid["selected_rows"]
+    except Exception:
+        sel = getattr(grid, "selected_rows", None)
+    if sel is None:
+        sel_urls = []
+    elif isinstance(sel, pd.DataFrame):
+        sel_urls = sel["request_url"].dropna().tolist() if "request_url" in sel.columns else []
+    else:
+        sel_urls = [r.get("request_url") for r in sel if r.get("request_url")]
+
+    st.write(f"**{len(sel_urls)}** request(s) selected.")
+    confirm = st.checkbox("Yes, permanently delete the selected requests and their workbooks.")
+    if st.button("Delete selected", type="primary", disabled=not (sel_urls and confirm)):
+        with st.spinner("Deleting workbooks and log rows…"):
+            n_done, errs = storage.delete_requests(sel_urls)
+        st.session_state.admin_result = (n_done, errs)
+        st.rerun()
+    st.stop()
 
 if st.session_state.page == "landing":
     head_l, head_r = st.columns([3, 2])
