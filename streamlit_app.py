@@ -8,6 +8,7 @@ tagged with the verified requester's email.
 
 import pandas as pd
 import streamlit as st
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 import mappings
 import storage
@@ -19,15 +20,6 @@ st.set_page_config(
 )
 
 
-def pager_items(current, total):
-    """Page-number list with ellipses, e.g. [1,2,3,4,5,'…',304]."""
-    if total <= 7:
-        return list(range(1, total + 1))
-    if current <= 4:
-        return [1, 2, 3, 4, 5, "…", total]
-    if current >= total - 3:
-        return [1, "…", total - 4, total - 3, total - 2, total - 1, total]
-    return [1, "…", current - 1, current, current + 1, "…", total]
 
 
 # ── Secrets helpers ──────────────────────────────────────────────────────────
@@ -132,56 +124,32 @@ if st.session_state.page == "landing":
     non_empty = df.astype(str).apply(lambda col: col.str.strip().ne("").any())
     df = df.loc[:, non_empty]
 
-    # --- pagination state ---
-    if "req_page" not in st.session_state:
-        st.session_state.req_page = 1
-    page_size = st.session_state.get("req_page_size", 10)
-    total = len(df)
-    pages = max(1, (total + page_size - 1) // page_size)
-    cur = min(max(1, st.session_state.req_page), pages)
-    st.session_state.req_page = cur
-    start = (cur - 1) * page_size
-    end = min(start + page_size, total)
-
-    col_cfg = {}
-    if "request_url" in df.columns:
-        col_cfg["request_url"] = st.column_config.LinkColumn("Workbook", display_text="Open")
-    st.dataframe(
-        df.iloc[start:end],
-        use_container_width=True,
-        hide_index=True,
-        column_config=col_cfg,
+    # --- AG Grid: native pagination, page-size selector, sort/filter/resize ---
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_default_column(sortable=True, filter=True, resizable=True)
+    gb.configure_pagination(
+        enabled=True, paginationAutoPageSize=False, paginationPageSize=10
     )
-    st.caption(f"{total} request(s) — showing {start + 1}–{end}, newest first.")
+    if "request_url" in df.columns:
+        link_renderer = JsCode("""
+            function(params){
+                if(!params.value) return '';
+                return `<a href="${params.value}" target="_blank">Open</a>`;
+            }
+        """)
+        gb.configure_column("request_url", headerName="Workbook", cellRenderer=link_renderer)
+    grid_options = gb.build()
+    grid_options["paginationPageSizeSelector"] = [10, 25, 50]
 
-    # --- bottom pagination bar: pager centred, rows-per-page bottom-right ---
-    b_left, b_center, b_right = st.columns([1, 4, 1.4])
-    with b_center:
-        labels = ["‹"] + pager_items(cur, pages) + ["›"]
-        slots = st.columns(len(labels))
-        for i, lab in enumerate(labels):
-            with slots[i]:
-                if lab == "…":
-                    st.markdown("<p style='text-align:center;margin:6px 0'>…</p>",
-                                unsafe_allow_html=True)
-                    continue
-                if lab == "‹":
-                    target, disabled = cur - 1, cur == 1
-                elif lab == "›":
-                    target, disabled = cur + 1, cur == pages
-                else:
-                    target, disabled = lab, False
-                if st.button(str(lab), key=f"pg_{i}_{lab}", disabled=disabled,
-                             type=("primary" if lab == cur else "secondary"),
-                             use_container_width=True):
-                    st.session_state.req_page = min(max(1, target), pages)
-                    st.rerun()
-    with b_right:
-        st.selectbox(
-            "Rows", [10, 25, 50], index=[10, 25, 50].index(page_size),
-            key="req_page_size", label_visibility="collapsed",
-            format_func=lambda n: f"{n} / page",
-        )
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        theme="alpine",
+        height=470,
+        allow_unsafe_jscode=True,
+        fit_columns_on_grid_load=False,
+        enable_enterprise_modules=False,
+    )
     st.stop()
 
 # ── Form ─────────────────────────────────────────────────────────────────────
