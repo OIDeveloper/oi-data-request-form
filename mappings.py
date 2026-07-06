@@ -11,8 +11,17 @@ Mapping Master Appendix I.
 """
 
 import re
+from datetime import datetime, timedelta, timezone
 
 # ── Constants ────────────────────────────────────────────────────────────────
+IST = timezone(timedelta(hours=5, minutes=30))   # India Standard Time (no DST)
+
+
+def ist_timestamp():
+    """Current timestamp in IST, e.g. '2026-07-07 01:18:46 IST'."""
+    return datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S IST")
+
+
 REFERENCE_DATE = "2026-04-06"   # all age / recency math anchors here
 SCORE_MIN      = 300            # Experian V3 floor
 SCORE_MAX      = 900            # Experian V3 ceiling
@@ -132,6 +141,13 @@ def gstin_pan_match(gstin, pan):
 
 def valid_mobile(mobile):
     return bool(_MOBILE_RE.match((mobile or "").strip()))
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
+def valid_email(email):
+    return bool(_EMAIL_RE.match((email or "").strip()))
 
 
 # ── Normalizer & builders ────────────────────────────────────────────────────

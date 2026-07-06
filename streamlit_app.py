@@ -8,8 +8,6 @@ request so we always know who asked for each data cut.
 The full request form is built on top of this in later steps.
 """
 
-from datetime import datetime, timezone
-
 import streamlit as st
 
 import mappings
@@ -106,7 +104,7 @@ st.subheader("Step 7 — Google Sheet persistence test")
 if storage.storage_configured():
     if st.button("Send a test row to the Sheet"):
         try:
-            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+            ts = mappings.ist_timestamp()
             storage.append_row([ts, user_email, "test submission"])
             st.success("✅ Wrote a test row — check the Google Sheet.")
         except Exception as exc:
