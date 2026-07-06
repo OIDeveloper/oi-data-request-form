@@ -8,9 +8,12 @@ request so we always know who asked for each data cut.
 The full request form is built on top of this in later steps.
 """
 
+from datetime import datetime, timezone
+
 import streamlit as st
 
 import mappings
+import storage
 
 st.set_page_config(
     page_title="OI Data Request Form",
@@ -97,3 +100,19 @@ with st.expander("Sanity check — mappings.py loaded on this host"):
     st.write(f"**Score bands:** {len(mappings.SCORE_BANDS)}")
     st.write(f"**DPD presets:** {', '.join(mappings.DPD_PRESET_LABELS)}")
     st.write(f"**Reference date:** {mappings.REFERENCE_DATE}")
+
+st.divider()
+st.subheader("Step 7 — Google Sheet persistence test")
+if storage.storage_configured():
+    if st.button("Send a test row to the Sheet"):
+        try:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ")
+            storage.append_row([ts, user_email, "test submission"])
+            st.success("✅ Wrote a test row — check the Google Sheet.")
+        except Exception as exc:
+            st.error(f"Write failed: {exc}")
+else:
+    st.info(
+        "Google Sheet not configured yet — add the `[sheets]` and "
+        "`[gcp_service_account]` sections to secrets (Step 7)."
+    )

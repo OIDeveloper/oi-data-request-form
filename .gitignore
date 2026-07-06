@@ -3,6 +3,9 @@
 *.env
 .env
 reach_hints.json
+make_secrets.py
+*-service-account*.json
+*.json.key
 
 # --- Python ---
 __pycache__/
