@@ -66,6 +66,12 @@ def append_master(header, row):
     ws.append_row(row, value_input_option="USER_ENTERED")
 
 
+def read_all_requests():
+    """All rows from the master-log first sheet as a list of dicts (header-keyed)."""
+    ws = _client().open_by_key(st.secrets["sheets"]["id"]).sheet1
+    return ws.get_all_records()
+
+
 def _safe_filename(name):
     name = re.sub(r"[\r\n/\\]", " ", name or "").strip()
     return (name or "OI Data Request")[:120]
