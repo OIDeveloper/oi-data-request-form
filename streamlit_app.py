@@ -299,4 +299,3 @@ if st.session_state.submit_running:
         else:
             st.success(f"✅ Request submitted and recorded against **{user_email}**.")
             st.markdown(f"📄 Request workbook: **[{fname}]({furl})**")
-            st.balloons()
