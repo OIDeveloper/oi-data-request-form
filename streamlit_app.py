@@ -8,7 +8,7 @@ tagged with the verified requester's email.
 
 import pandas as pd
 import streamlit as st
-from st_aggrid import AgGrid, ColumnsAutoSizeMode, GridOptionsBuilder, JsCode
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
 
 import mappings
 import storage
@@ -140,6 +140,8 @@ if st.session_state.page == "landing":
         gb.configure_column("request_url", headerName="Workbook", cellRenderer=link_renderer)
     grid_options = gb.build()
     grid_options["paginationPageSizeSelector"] = [10, 25, 50]
+    # Size every column to its content at init (AG Grid v31+ native strategy).
+    grid_options["autoSizeStrategy"] = {"type": "fitCellContents"}
 
     AgGrid(
         df,
@@ -148,7 +150,6 @@ if st.session_state.page == "landing":
         height=470,
         allow_unsafe_jscode=True,
         fit_columns_on_grid_load=False,
-        columns_auto_size_mode=ColumnsAutoSizeMode.FIT_CONTENTS,
         enable_enterprise_modules=False,
     )
     st.stop()
