@@ -109,7 +109,7 @@ DPD_PRESET_LABELS = list(DPD_PRESETS.keys())
 
 
 # ── Recipient / employment enums ─────────────────────────────────────────────
-RECIPIENT_TYPES = ["NBFC", "DSA", "Connector", "DDSA", "DST"]
+RECIPIENT_TYPES = ["Connector", "DDSA", "DSA", "DST", "NBFC"]  # alphabetical
 
 # (label, enabled). Only Salaried has data today; others are shown-but-disabled.
 EMPLOYMENT_TYPES = [
@@ -281,12 +281,18 @@ def validate_submission(a):
         errs.append("Recipient contact must be a 10-digit Indian mobile (starts 6-9).")
     if not valid_email(a.get("recipient_email")):
         errs.append("Recipient email looks invalid.")
-    if not valid_pan(a.get("recipient_pan")):
-        errs.append("Recipient PAN must look like ABCDE1234F.")
-    if not valid_gstin(a.get("recipient_gst")):
-        errs.append("Recipient GST is not a valid 15-char GSTIN.")
-    elif not gstin_pan_match(a.get("recipient_gst"), a.get("recipient_pan")):
-        errs.append("GST does not embed the given PAN (GSTIN characters 3-12).")
+    pan = (a.get("recipient_pan") or "").strip()
+    gst = (a.get("recipient_gst") or "").strip()
+    if not pan and not gst:
+        errs.append("Provide a GST or PAN number (GST preferred).")
+    else:
+        if pan and not valid_pan(pan):
+            errs.append("PAN must look like ABCDE1234F.")
+        if gst and not valid_gstin(gst):
+            errs.append("GST must be a valid 15-char GSTIN.")
+        if (pan and gst and valid_pan(pan) and valid_gstin(gst)
+                and not gstin_pan_match(gst, pan)):
+            errs.append("GST does not embed the given PAN (GSTIN characters 3-12).")
 
     tc = a.get("target_count")
     if not tc or tc <= 0:
@@ -385,6 +391,11 @@ if __name__ == "__main__":
     assert any("add up to" in e for e in validate_submission(bad))
     # bad PAN caught
     assert any("PAN" in e for e in validate_submission(dict(sample, recipient_pan="x")))
+    # GST or PAN: neither -> error; GST-only or PAN-only -> ok
+    assert any("GST or PAN" in e
+               for e in validate_submission(dict(sample, recipient_pan="", recipient_gst="")))
+    assert validate_submission(dict(sample, recipient_pan="")) == []          # GST only
+    assert validate_submission(dict(sample, recipient_gst="")) == []          # PAN only
 
     print("mappings.py self-test: ALL PASS")
     print(f"  products: {len(PRODUCTS)}  classes: {len(MEMBER_CLASSES)}  "

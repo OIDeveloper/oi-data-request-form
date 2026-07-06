@@ -89,29 +89,55 @@ st.caption(
 st.subheader("1 · Recipient")
 c1, c2 = st.columns(2)
 recipient_name = c1.text_input("Recipient name \\*")
+if not recipient_name.strip():
+    c1.markdown(":orange[Required]")
 recipient_type = c2.selectbox(
     "Recipient type \\*", mappings.RECIPIENT_TYPES, index=None, placeholder="Select…"
 )
+if not recipient_type:
+    c2.markdown(":orange[Required]")
+
 c3, c4 = st.columns(2)
 recipient_contact = c3.text_input("Contact number \\*", placeholder="10-digit mobile")
+if recipient_contact and not mappings.valid_mobile(recipient_contact):
+    c3.markdown(":red[⚠️ 10-digit mobile starting 6–9]")
+elif not recipient_contact:
+    c3.markdown(":orange[Required]")
 recipient_email = c4.text_input("Email \\*")
+if recipient_email and not mappings.valid_email(recipient_email):
+    c4.markdown(":red[⚠️ Invalid email address]")
+elif not recipient_email:
+    c4.markdown(":orange[Required]")
+
 c5, c6 = st.columns(2)
-recipient_pan = c5.text_input("PAN \\*", placeholder="ABCDE1234F")
-recipient_gst = c6.text_input("GST (optional, preferred)")
+recipient_gst = c5.text_input("GST (preferred)", placeholder="27ABCDE1234F1Z5")
+if recipient_gst and not mappings.valid_gstin(recipient_gst):
+    c5.markdown(":red[⚠️ Not a valid 15-char GSTIN]")
+recipient_pan = c6.text_input("PAN", placeholder="ABCDE1234F")
+if recipient_pan and not mappings.valid_pan(recipient_pan):
+    c6.markdown(":red[⚠️ Must look like ABCDE1234F]")
+_gst_ok = bool(recipient_gst) and mappings.valid_gstin(recipient_gst)
+_pan_ok = bool(recipient_pan) and mappings.valid_pan(recipient_pan)
+if not recipient_gst and not recipient_pan:
+    st.markdown(":orange[Provide **GST or PAN** — GST preferred. At least one is required.]")
+elif _gst_ok and _pan_ok and not mappings.gstin_pan_match(recipient_gst, recipient_pan):
+    st.markdown(":red[⚠️ GST does not embed this PAN (characters 3–12).]")
 
 st.subheader("2 · Campaign")
 target_count = st.number_input(
     "How many leads do you need? (target count) \\*", min_value=1, step=1000, value=None
 )
-c7, c8 = st.columns(2)
-exclude_prev = c7.checkbox("Exclude leads sent in past campaigns")
-allow_ntc = c8.checkbox("Allow new-to-credit (no bureau score)", value=True)
+if not target_count:
+    st.markdown(":orange[Required]")
+allow_ntc = st.checkbox("Allow new-to-credit (no bureau score)", value=True)
 
 st.subheader("3 · Demographics")
 c9, c10, c11 = st.columns(3)
 min_age = c9.number_input("Min age", min_value=18, max_value=100, step=1, value=None)
 max_age = c10.number_input("Max age", min_value=18, max_value=100, step=1, value=None)
 min_salary = c11.number_input("Min monthly salary (₹)", min_value=0, step=5000, value=None)
+if min_age and max_age and min_age > max_age:
+    st.markdown(":red[⚠️ Min age cannot exceed max age.]")
 employment_type = st.selectbox("Employment type", mappings.EMPLOYMENT_ENABLED, index=0)
 st.caption("Self-employed / Both — coming later (only salaried data available today).")
 
@@ -204,7 +230,6 @@ if st.session_state.submit_running:
         "recipient_pan": recipient_pan,
         "recipient_gst": recipient_gst,
         "target_count": _i(target_count),
-        "exclude_previously_sent": exclude_prev,
         "allow_ntc": allow_ntc,
         "min_age": _i(min_age),
         "max_age": _i(max_age),
