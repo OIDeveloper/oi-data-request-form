@@ -70,6 +70,9 @@ def require_login():
 
 user_email = require_login()
 
+# Logo only after a successful, authorised login (require_login stops before here).
+st.logo("assets/oneflo-logo.png", size="large")
+
 
 def _i(x):
     """number_input value -> int or None (preserves an explicit 0)."""
