@@ -184,6 +184,130 @@ def dpd_preset_fields(preset):
     return dict(DPD_PRESETS.get(preset, {}))
 
 
+# ── Campaign-template transform ──────────────────────────────────────────────
+# Ordered exactly like the OI_Campaign_Request_Template Filter Criteria sheet.
+TEMPLATE_FIELDS = [
+    "recipient_code", "recipient_name", "recipient_type", "batch_label",
+    "target_count", "fresh", "ntc_allowed",
+    "min_age", "max_age", "min_salary_monthly", "employment_type", "city",
+    "min_score", "max_score",
+    "bucket_below_650_quota", "bucket_650_699_quota", "bucket_700_749_quota",
+    "bucket_750_799_quota", "bucket_800_plus_quota", "bucket_ntc_quota",
+    "pan_required", "unique_pan_per_mobile",
+    "max_dpd_30", "max_dpd_60", "max_dpd_90",
+    "max_dpd_30_in_3m", "max_dpd_30_in_6m", "max_dpd_30_in_12m",
+    "max_dpd_60_in_6m", "max_dpd_60_in_12m", "max_dpd_60_in_18m", "max_dpd_60_in_24m",
+    "max_dpd_90_in_12m", "max_dpd_90_in_24m",
+    "exclude_writeoff", "max_total_past_due_am",
+    "max_pl_enq_7d", "max_pl_enq_10d", "max_pl_enq_30d", "max_pl_enq_90d",
+    "enq_include_purpose_codes", "enq_exclude_purpose_codes",
+    "enq_include_member_classes", "enq_exclude_member_classes",
+    "enq_window_days", "enq_max_in_window", "enq_date_from", "enq_date_to",
+    "min_enq_amount", "max_enq_amount",
+]
+
+
+def _num(x):
+    """Format a number for a template cell: '' for blank, else integer string."""
+    if x is None or x == "":
+        return ""
+    try:
+        return str(int(x))
+    except (TypeError, ValueError):
+        return str(x)
+
+
+def to_template_values(a):
+    """Map a form-answers dict to the campaign-template field values.
+
+    Unset fields stay blank (the generator then skips them). recipient_code /
+    batch_label are left blank for the data team to assign at ingestion.
+    """
+    v = {f: "" for f in TEMPLATE_FIELDS}
+
+    v["recipient_name"] = (a.get("recipient_name") or "").strip()
+    v["recipient_type"] = a.get("recipient_type") or ""
+    v["target_count"] = _num(a.get("target_count"))
+    v["fresh"] = "Yes" if a.get("exclude_previously_sent") else "No"
+    v["ntc_allowed"] = "Yes" if a.get("allow_ntc") else "No"
+
+    v["min_age"] = _num(a.get("min_age"))
+    v["max_age"] = _num(a.get("max_age"))
+    v["min_salary_monthly"] = _num(a.get("min_salary_monthly"))
+    v["employment_type"] = a.get("employment_type") or ""
+    v["city"] = (a.get("city") or "").strip()
+
+    v["min_score"] = _num(a.get("min_score"))
+    v["max_score"] = _num(a.get("max_score"))
+    quotas = a.get("quotas") or {}
+    for b in SCORE_BANDS:
+        q = quotas.get(b["label"])
+        if q:
+            v[b["field"]] = _num(q)
+
+    v["pan_required"] = "Yes" if a.get("pan_required") else "No"
+    v["unique_pan_per_mobile"] = "Yes"
+
+    for k, val in dpd_preset_fields(a.get("credit_conduct") or "Any").items():
+        v[k] = str(val)
+
+    v["enq_include_purpose_codes"] = purpose_codes_csv(a.get("products_include") or [])
+    v["enq_exclude_purpose_codes"] = purpose_codes_csv(a.get("products_exclude") or [])
+    v["enq_include_member_classes"] = member_classes_csv(a.get("lenders_include") or [])
+    v["enq_exclude_member_classes"] = member_classes_csv(a.get("lenders_exclude") or [])
+    v["enq_window_days"] = _num(a.get("enq_window_days"))
+    v["enq_max_in_window"] = _num(a.get("enq_max_in_window"))
+
+    v["min_enq_amount"] = _num(a.get("loan_amount_min"))
+    lam = a.get("loan_amount_max")
+    v["max_enq_amount"] = _num(min(lam, AMOUNT_CAP)) if lam else ""
+
+    return v
+
+
+def validate_submission(a):
+    """Return a list of human-readable errors (empty = valid)."""
+    errs = []
+    if not (a.get("recipient_name") or "").strip():
+        errs.append("Recipient name is required.")
+    if a.get("recipient_type") not in RECIPIENT_TYPES:
+        errs.append("Select a recipient type.")
+    if not valid_mobile(a.get("recipient_contact")):
+        errs.append("Recipient contact must be a 10-digit Indian mobile (starts 6-9).")
+    if not valid_email(a.get("recipient_email")):
+        errs.append("Recipient email looks invalid.")
+    if not valid_pan(a.get("recipient_pan")):
+        errs.append("Recipient PAN must look like ABCDE1234F.")
+    if not valid_gstin(a.get("recipient_gst")):
+        errs.append("Recipient GST is not a valid 15-char GSTIN.")
+    elif not gstin_pan_match(a.get("recipient_gst"), a.get("recipient_pan")):
+        errs.append("GST does not embed the given PAN (GSTIN characters 3-12).")
+
+    tc = a.get("target_count")
+    if not tc or tc <= 0:
+        errs.append("Target count must be a positive number.")
+
+    mn, mx = a.get("min_age"), a.get("max_age")
+    if mn and mx and mn > mx:
+        errs.append("Min age cannot exceed max age.")
+
+    for s in (a.get("min_score"), a.get("max_score")):
+        if s and not (SCORE_MIN <= s <= SCORE_MAX):
+            errs.append(f"Scores must be between {SCORE_MIN} and {SCORE_MAX}.")
+            break
+
+    bands = a.get("score_bands") or []
+    quotas = a.get("quotas") or {}
+    if bands:
+        total = sum(int(quotas.get(b) or 0) for b in bands)
+        if tc and total != tc:
+            errs.append(
+                f"Score-band quotas add up to {total}, but target count is {tc}. "
+                "They must match."
+            )
+    return errs
+
+
 def load_reach_hints(secrets=None):
     """Return reach-count hints, or {} if none are available.
 
@@ -227,6 +351,35 @@ if __name__ == "__main__":
     assert valid_gstin("") and valid_gstin("27ABCDE1234F1Z5")
     assert gstin_pan_match("27ABCDE1234F1Z5", "ABCDE1234F")
     assert not gstin_pan_match("27ABCDE1234F1Z5", "ZZZZZ9999Z")
+
+    # Transform + validation
+    sample = {
+        "recipient_name": "Fast Credit Pvt Ltd", "recipient_type": "NBFC",
+        "recipient_contact": "9876543210", "recipient_email": "a@b.com",
+        "recipient_pan": "ABCDE1234F", "recipient_gst": "27ABCDE1234F1Z5",
+        "target_count": 15000, "exclude_previously_sent": True, "allow_ntc": True,
+        "min_age": 23, "max_age": 55, "min_salary_monthly": 50000,
+        "employment_type": "Salaried",
+        "score_bands": ["750-799", "800+"],
+        "quotas": {"750-799": 8000, "800+": 7000},
+        "products_include": ["Personal Loan", "Credit Card"],
+        "lenders_exclude": ["Housing Finance Co"],
+        "credit_conduct": "Strict", "pan_required": True,
+        "loan_amount_max": 50_000_000,   # above the 1cr cap -> should clamp
+    }
+    assert validate_submission(sample) == [], validate_submission(sample)
+    tv = to_template_values(sample)
+    assert tv["fresh"] == "Yes" and tv["ntc_allowed"] == "Yes"
+    assert tv["enq_include_purpose_codes"] == "13,7"
+    assert tv["enq_exclude_member_classes"] == "HFC"
+    assert tv["bucket_750_799_quota"] == "8000" and tv["bucket_800_plus_quota"] == "7000"
+    assert tv["exclude_writeoff"] == "Yes" and tv["max_dpd_90"] == "0"
+    assert tv["max_enq_amount"] == str(AMOUNT_CAP)   # clamped to 1cr
+    # quota mismatch is caught
+    bad = dict(sample, quotas={"750-799": 1, "800+": 1})
+    assert any("add up to" in e for e in validate_submission(bad))
+    # bad PAN caught
+    assert any("PAN" in e for e in validate_submission(dict(sample, recipient_pan="x")))
 
     print("mappings.py self-test: ALL PASS")
     print(f"  products: {len(PRODUCTS)}  classes: {len(MEMBER_CLASSES)}  "

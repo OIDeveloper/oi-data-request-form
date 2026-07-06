@@ -45,6 +45,14 @@ def append_row(values):
     _worksheet().append_row(values, value_input_option="USER_ENTERED")
 
 
+def append_submission(header, row):
+    """Append a submission row, writing `header` first if the sheet is empty."""
+    ws = _worksheet()
+    if not ws.get_all_values():
+        ws.append_row(header, value_input_option="RAW")
+    ws.append_row(row, value_input_option="USER_ENTERED")
+
+
 def service_account_email():
     """The service-account address the Sheet must be shared with (for hints)."""
     try:
