@@ -19,6 +19,12 @@ st.set_page_config(
     layout="wide",
 )
 
+# Hide the auto-generated anchor-link icon that Streamlit adds to every header.
+st.markdown(
+    "<style>[data-testid='stHeaderActionElements']{display:none;}</style>",
+    unsafe_allow_html=True,
+)
+
 
 
 
@@ -377,7 +383,7 @@ credit_conduct = st.radio(
          "Moderate = no serious recent delinquency. Any = no filter.",
     key=f"credit_conduct_{V}",
 )
-pan_required = st.checkbox("Require a PAN on every lead", value=True, key=f"pan_required_{V}")
+pan_required = st.checkbox("Require a PAN on every lead", value=False, key=f"pan_required_{V}")
 
 with st.expander("Advanced (optional)"):
     ac1, ac2 = st.columns(2)
