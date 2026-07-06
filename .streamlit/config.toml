@@ -1,0 +1,10 @@
+# Non-secret app config. Safe to commit.
+# (Secrets go in .streamlit/secrets.toml, which is gitignored.)
+
+[theme]
+primaryColor = "#2563eb"
+base = "light"
+
+[server]
+# Keep uploaded-data limits small; this app takes no file uploads.
+maxUploadSize = 5
