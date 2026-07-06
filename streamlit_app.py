@@ -125,6 +125,22 @@ if st.session_state.page == "admin":
         st.session_state.page = "landing"
         st.rerun()
 
+    if "delete_running" not in st.session_state:
+        st.session_state.delete_running = False
+    if "confirm_ver" not in st.session_state:
+        st.session_state.confirm_ver = 0
+
+    # Process a pending delete (button stays disabled + spinner = no double-click).
+    if st.session_state.delete_running:
+        urls = st.session_state.get("pending_delete", [])
+        with st.spinner("Deleting workbooks and log rows…"):
+            n_done, errs = storage.delete_requests(urls)
+        st.session_state.delete_running = False
+        st.session_state.pop("pending_delete", None)
+        st.session_state.confirm_ver += 1          # reset the confirm checkbox
+        st.session_state.admin_result = (n_done, errs)
+        st.rerun()
+
     if "admin_result" in st.session_state:
         n_done, errs = st.session_state.pop("admin_result")
         st.success(f"Deleted {n_done} request(s).")
@@ -174,11 +190,14 @@ if st.session_state.page == "admin":
         sel_urls = [r.get("request_url") for r in sel if r.get("request_url")]
 
     st.write(f"**{len(sel_urls)}** request(s) selected.")
-    confirm = st.checkbox("Yes, permanently delete the selected requests and their workbooks.")
-    if st.button("Delete selected", type="primary", disabled=not (sel_urls and confirm)):
-        with st.spinner("Deleting workbooks and log rows…"):
-            n_done, errs = storage.delete_requests(sel_urls)
-        st.session_state.admin_result = (n_done, errs)
+    confirm = st.checkbox(
+        "Yes, permanently delete the selected requests and their workbooks.",
+        value=False, key=f"confirm_del_{st.session_state.confirm_ver}",
+    )
+    if st.button("Delete selected", type="primary",
+                 disabled=st.session_state.delete_running or not (sel_urls and confirm)):
+        st.session_state.delete_running = True
+        st.session_state.pending_delete = sel_urls
         st.rerun()
     st.stop()
 
