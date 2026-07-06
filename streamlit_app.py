@@ -15,8 +15,19 @@ import storage
 st.set_page_config(
     page_title="OI Data Request Form",
     page_icon="📋",
-    layout="centered",
+    layout="wide",
 )
+
+
+def pager_items(current, total):
+    """Page-number list with ellipses, e.g. [1,2,3,4,5,'…',304]."""
+    if total <= 7:
+        return list(range(1, total + 1))
+    if current <= 4:
+        return [1, 2, 3, 4, 5, "…", total]
+    if current >= total - 3:
+        return [1, "…", total - 4, total - 3, total - 2, total - 1, total]
+    return [1, "…", current - 1, current, current + 1, "…", total]
 
 
 # ── Secrets helpers ──────────────────────────────────────────────────────────
@@ -121,14 +132,16 @@ if st.session_state.page == "landing":
     non_empty = df.astype(str).apply(lambda col: col.str.strip().ne("").any())
     df = df.loc[:, non_empty]
 
-    ctrl_l, ctrl_r = st.columns([1, 2])
-    page_size = ctrl_l.selectbox("Rows per page", [10, 25, 50], index=0)
+    # --- pagination state ---
+    if "req_page" not in st.session_state:
+        st.session_state.req_page = 1
+    page_size = st.session_state.get("req_page_size", 10)
     total = len(df)
     pages = max(1, (total + page_size - 1) // page_size)
-    page_num = ctrl_r.number_input("Page", min_value=1, max_value=pages, value=1, step=1)
-    start = (page_num - 1) * page_size
+    cur = min(max(1, st.session_state.req_page), pages)
+    st.session_state.req_page = cur
+    start = (cur - 1) * page_size
     end = min(start + page_size, total)
-    st.caption(f"{total} request(s) — showing {start + 1}–{end}, newest first.")
 
     col_cfg = {}
     if "request_url" in df.columns:
@@ -139,6 +152,36 @@ if st.session_state.page == "landing":
         hide_index=True,
         column_config=col_cfg,
     )
+    st.caption(f"{total} request(s) — showing {start + 1}–{end}, newest first.")
+
+    # --- bottom pagination bar: pager centred, rows-per-page bottom-right ---
+    b_left, b_center, b_right = st.columns([1, 4, 1.4])
+    with b_center:
+        labels = ["‹"] + pager_items(cur, pages) + ["›"]
+        slots = st.columns(len(labels))
+        for i, lab in enumerate(labels):
+            with slots[i]:
+                if lab == "…":
+                    st.markdown("<p style='text-align:center;margin:6px 0'>…</p>",
+                                unsafe_allow_html=True)
+                    continue
+                if lab == "‹":
+                    target, disabled = cur - 1, cur == 1
+                elif lab == "›":
+                    target, disabled = cur + 1, cur == pages
+                else:
+                    target, disabled = lab, False
+                if st.button(str(lab), key=f"pg_{i}_{lab}", disabled=disabled,
+                             type=("primary" if lab == cur else "secondary"),
+                             use_container_width=True):
+                    st.session_state.req_page = min(max(1, target), pages)
+                    st.rerun()
+    with b_right:
+        st.selectbox(
+            "Rows", [10, 25, 50], index=[10, 25, 50].index(page_size),
+            key="req_page_size", label_visibility="collapsed",
+            format_func=lambda n: f"{n} / page",
+        )
     st.stop()
 
 # ── Form ─────────────────────────────────────────────────────────────────────
