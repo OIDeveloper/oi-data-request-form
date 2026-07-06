@@ -55,12 +55,9 @@ def request_folder_id():
 
 
 def append_master(header, row):
-    """Append a row to the master log, guaranteeing `header` sits on row 1."""
-    sh = _client().open_by_key(st.secrets["sheets"]["id"])
-    try:
-        ws = sh.worksheet(MASTER_TITLE)
-    except gspread.WorksheetNotFound:
-        ws = sh.add_worksheet(title=MASTER_TITLE, rows=2000, cols=max(len(header), 26))
+    """Append a row to the FIRST sheet of the master log file, guaranteeing
+    `header` sits on row 1."""
+    ws = _client().open_by_key(st.secrets["sheets"]["id"]).sheet1
     existing = ws.get_all_values()
     if not existing:
         ws.append_row(header, value_input_option="RAW")
