@@ -19,9 +19,22 @@ st.set_page_config(
     layout="wide",
 )
 
-# Hide the auto-generated anchor-link icon that Streamlit adds to every header.
+# Global CSS: hide header anchor icons; show the collapsed-sidebar toggle as a
+# hamburger (☰) on all devices for a mobile-style menu.
 st.markdown(
-    "<style>[data-testid='stHeaderActionElements']{display:none;}</style>",
+    """
+    <style>
+    [data-testid='stHeaderActionElements'] { display: none; }
+    [data-testid='stSidebarCollapsedControl'] svg,
+    [data-testid='collapsedControl'] svg { display: none !important; }
+    [data-testid='stSidebarCollapsedControl'] button::after,
+    [data-testid='collapsedControl'] button::after {
+        content: '☰';
+        font-size: 24px;
+        line-height: 1;
+    }
+    </style>
+    """,
     unsafe_allow_html=True,
 )
 
