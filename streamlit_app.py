@@ -25,6 +25,16 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Illustrative sample of the standard campaign output (FAKE data — for the form preview).
+SAMPLE_OUTPUT_COLUMNS = [
+    "Name", "Mobile", "PAN", "Age", "MonthlySalary", "EmploymentType",
+    "BureauScore", "MaxDPD90", "WriteOff", "PLEnquiry", "NTC", "LoanOverdue",
+]
+SAMPLE_OUTPUT_ROWS = [
+    ["Rahul Sharma", "9876543210", "ABCDE1234F", 34, 65000, "Salaried", 782, 0, "No", 1, "No", "No"],
+    ["Priya Nair", "9123456780", "PQRSX6789K", 41, 52000, "Salaried", 810, 0, "No", 0, "No", "No"],
+]
+
 
 
 
@@ -397,6 +407,14 @@ st.caption(
     "Fill in what you need — blank filters mean no restriction. "
     "Your verified email is recorded on every submission."
 )
+
+with st.expander("📄 Sample of the data you'll receive"):
+    st.caption("Illustrative sample only — not real records. Every delivered file has these "
+               "standard columns.")
+    st.dataframe(
+        pd.DataFrame(SAMPLE_OUTPUT_ROWS, columns=SAMPLE_OUTPUT_COLUMNS),
+        hide_index=True, use_container_width=True,
+    )
 
 st.subheader("1 · Recipient")
 c1, c2 = st.columns(2)
