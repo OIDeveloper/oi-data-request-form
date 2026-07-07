@@ -77,6 +77,65 @@ def _spreadsheet_id_from_url(url):
     return m.group(1) if m else None
 
 
+# ── App users (allowlist) — stored in an "App Users" tab of the master file ───
+APP_USERS_TITLE = "App Users"
+APP_USERS_HEADER = ["email", "is_admin", "added_by", "added_at"]
+
+
+def _app_users_ws():
+    sh = _client().open_by_key(st.secrets["sheets"]["id"])
+    try:
+        return sh.worksheet(APP_USERS_TITLE)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=APP_USERS_TITLE, rows=200, cols=len(APP_USERS_HEADER))
+        ws.append_row(APP_USERS_HEADER, value_input_option="RAW")
+        return ws
+
+
+def get_or_seed_app_users(seed_emails, bootstrap_admin, added_by="system"):
+    """Return the App Users rows (dicts). If the tab is empty, seed it once with
+    the bootstrap admin (is_admin=Yes) plus seed_emails (is_admin=No)."""
+    ws = _app_users_ws()
+    records = ws.get_all_records()
+    if not records:
+        rows, seen = [], set()
+        for e in [bootstrap_admin] + list(seed_emails):
+            e = (e or "").strip().lower()
+            if e and e not in seen:
+                seen.add(e)
+                rows.append([e, "Yes" if e == bootstrap_admin else "No", added_by, ""])
+        if rows:
+            ws.append_rows(rows, value_input_option="RAW")
+        records = ws.get_all_records()
+    return records
+
+
+def add_app_user(email, is_admin, added_by, added_at):
+    """Add a user; if the email already exists, just update its is_admin flag."""
+    ws = _app_users_ws()
+    email = (email or "").strip().lower()
+    flag = "Yes" if is_admin else "No"
+    values = ws.get_all_values()
+    for i, row in enumerate(values):
+        if i >= 1 and row and row[0].strip().lower() == email:
+            ws.update_cell(i + 1, 2, flag)
+            return "updated"
+    ws.append_row([email, flag, added_by, added_at], value_input_option="RAW")
+    return "added"
+
+
+def delete_app_users(emails):
+    """Delete rows whose email is in `emails`. Returns the count removed."""
+    ws = _app_users_ws()
+    targets = {(e or "").strip().lower() for e in emails}
+    values = ws.get_all_values()
+    rows = [i + 1 for i, row in enumerate(values)
+            if i >= 1 and row and row[0].strip().lower() in targets]
+    for r in sorted(rows, reverse=True):
+        ws.delete_rows(r)
+    return len(rows)
+
+
 def delete_requests(urls):
     """Delete each request's workbook file AND its master-log row.
 

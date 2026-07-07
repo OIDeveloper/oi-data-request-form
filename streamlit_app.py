@@ -36,7 +36,12 @@ def _auth_configured():
         return False
 
 
-def allowed_emails():
+# Always allowed + always admin, regardless of the App Users sheet (anti-lockout).
+BOOTSTRAP_ADMIN = "developer@oneinfinity.in"
+
+
+def _secrets_allowlist():
+    """Legacy allowlist from secrets — used only to seed the App Users sheet once."""
     try:
         raw = st.secrets["allowed_emails"]
     except Exception:
@@ -46,18 +51,24 @@ def allowed_emails():
     return [str(e).strip().lower() for e in raw]
 
 
-def admin_emails():
-    """Emails allowed into the admin cleanup page. Defaults to the developer id."""
-    default = ["developer@oneinfinity.in"]
+@st.cache_data(ttl=60, show_spinner=False)
+def _user_records():
     try:
-        raw = st.secrets["admin_emails"]
+        return storage.get_or_seed_app_users(_secrets_allowlist(), BOOTSTRAP_ADMIN)
     except Exception:
-        return default
-    if isinstance(raw, str):
-        lst = [e.strip().lower() for e in raw.split(",") if e.strip()]
-    else:
-        lst = [str(e).strip().lower() for e in raw]
-    return lst or default
+        return []
+
+
+def user_map():
+    """email -> is_admin(bool), from the App Users sheet. The bootstrap admin is
+    always present as admin so no edit can lock everyone out."""
+    m = {}
+    for r in _user_records():
+        e = str(r.get("email", "")).strip().lower()
+        if e:
+            m[e] = str(r.get("is_admin", "")).strip().lower() in ("yes", "true", "1")
+    m[BOOTSTRAP_ADMIN] = True
+    return m
 
 
 # ── Auth gate ────────────────────────────────────────────────────────────────
@@ -77,7 +88,7 @@ def require_login():
         st.stop()
 
     email = (st.user.email or "").strip().lower()
-    if email not in allowed_emails():
+    if email not in user_map():
         st.title("📋 OI Data Request Form")
         st.error(
             f"Access denied for **{email}**. This tool is restricted to approved "
@@ -89,7 +100,7 @@ def require_login():
 
 
 user_email = require_login()
-is_admin = user_email in admin_emails()
+is_admin = user_map().get(user_email, False)
 
 # Logo only after a successful, authorised login (require_login stops before here).
 st.logo("assets/oneflo-logo.png", size="large")
@@ -108,6 +119,9 @@ with st.sidebar:
     st.button("Sign out", on_click=st.logout, use_container_width=True)
     if is_admin:
         st.divider()
+        if st.button("👥 Manage users", use_container_width=True):
+            st.session_state.page = "users"
+            st.rerun()
         if st.button("🧹 Admin cleanup", use_container_width=True):
             st.session_state.page = "admin"
             st.rerun()
@@ -120,6 +134,102 @@ V = st.session_state.form_ver
 # ── Page routing ─────────────────────────────────────────────────────────────
 if "page" not in st.session_state:
     st.session_state.page = "landing"
+
+if st.session_state.page == "users":
+    if not is_admin:
+        st.session_state.page = "landing"
+        st.rerun()
+    uh_l, uh_r = st.columns([3, 2])
+    uh_l.title("👥 Manage app users")
+    if uh_r.button("← Back to my requests", use_container_width=True):
+        st.session_state.page = "landing"
+        st.rerun()
+
+    if "udel_running" not in st.session_state:
+        st.session_state.udel_running = False
+    if "uconfirm_ver" not in st.session_state:
+        st.session_state.uconfirm_ver = 0
+
+    # Process a pending removal (disabled button + spinner = no double-click).
+    if st.session_state.udel_running:
+        with st.spinner("Removing user(s)…"):
+            n_rm = storage.delete_app_users(st.session_state.get("pending_udel", []))
+        st.session_state.udel_running = False
+        st.session_state.pop("pending_udel", None)
+        st.session_state.uconfirm_ver += 1
+        _user_records.clear()
+        st.session_state.user_msg = f"Removed {n_rm} user(s)."
+        st.rerun()
+
+    if "user_msg" in st.session_state:
+        st.success(st.session_state.pop("user_msg"))
+
+    st.caption(
+        "Anyone listed here can sign in. Tick ‘Admin’ to grant admin access. "
+        f"{BOOTSTRAP_ADMIN} is always an admin and cannot be removed."
+    )
+
+    with st.container(border=True):
+        st.subheader("Add a user", anchor=False)
+        ac1, ac2, ac3 = st.columns([3, 1, 1])
+        new_email = ac1.text_input("Email", placeholder="name@oneinfinity.in", key="new_user_email")
+        new_admin = ac2.checkbox("Admin", value=False, key="new_user_admin")
+        if ac3.button("Add / update", type="primary"):
+            e = (new_email or "").strip().lower()
+            if not mappings.valid_email(e):
+                st.error("Enter a valid email address.")
+            else:
+                with st.spinner("Saving…"):
+                    storage.add_app_user(e, new_admin, user_email, mappings.ist_timestamp())
+                _user_records.clear()
+                st.session_state.user_msg = f"Saved {e}."
+                st.rerun()
+
+    try:
+        urecs = storage.get_or_seed_app_users(_secrets_allowlist(), BOOTSTRAP_ADMIN)
+    except Exception as exc:
+        st.error(f"Couldn't load users: {type(exc).__name__}: {exc!r}")
+        urecs = []
+
+    udf = pd.DataFrame(urecs)
+    if udf.empty:
+        st.info("No users yet.")
+        st.stop()
+
+    ugb = GridOptionsBuilder.from_dataframe(udf)
+    ugb.configure_default_column(editable=False, sortable=True, filter=False, resizable=True)
+    ugb.configure_selection("multiple", use_checkbox=True, header_checkbox=True)
+    uopts = ugb.build()
+    uopts["autoSizeStrategy"] = {"type": "fitCellContents"}
+    ugrid = AgGrid(
+        udf, gridOptions=uopts, theme="alpine", height=360,
+        allow_unsafe_jscode=True, fit_columns_on_grid_load=False,
+        enable_enterprise_modules=False, update_mode=GridUpdateMode.SELECTION_CHANGED,
+    )
+    try:
+        usel = ugrid["selected_rows"]
+    except Exception:
+        usel = getattr(ugrid, "selected_rows", None)
+    if usel is None:
+        sel_emails = []
+    elif isinstance(usel, pd.DataFrame):
+        sel_emails = usel["email"].dropna().tolist() if "email" in usel.columns else []
+    else:
+        sel_emails = [r.get("email") for r in usel if r.get("email")]
+    # never allow removing the bootstrap admin
+    sel_emails = [e for e in sel_emails if str(e).strip().lower() != BOOTSTRAP_ADMIN]
+
+    st.write(f"**{len(sel_emails)}** user(s) selected for removal.")
+    uconfirm = st.checkbox(
+        "Yes, remove the selected users.", value=False,
+        key=f"uconfirm_{st.session_state.uconfirm_ver}",
+    )
+    if st.button("Remove selected", type="primary",
+                 disabled=st.session_state.udel_running or not (sel_emails and uconfirm)):
+        st.session_state.udel_running = True
+        st.session_state.pending_udel = sel_emails
+        st.rerun()
+    st.stop()
 
 if st.session_state.page == "admin":
     if not is_admin:

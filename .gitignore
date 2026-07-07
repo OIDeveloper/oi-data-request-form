@@ -28,5 +28,8 @@ env/
 04_golden/
 05_exports/
 
+# --- Internal build docs (keep local; repo is public) ---
+*.docx
+
 # --- OS ---
 .DS_Store
