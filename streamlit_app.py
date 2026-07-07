@@ -168,10 +168,7 @@ if st.session_state.page == "users":
     if "user_msg" in st.session_state:
         st.success(st.session_state.pop("user_msg"))
 
-    st.caption(
-        "Anyone listed here can sign in. Tick ‘Admin’ to grant admin access. "
-        f"{BOOTSTRAP_ADMIN} is always an admin and cannot be removed."
-    )
+    st.caption("Anyone listed here can sign in. Tick ‘Admin’ to grant admin access.")
 
     av = st.session_state.adduser_ver
     with st.container(border=True):
