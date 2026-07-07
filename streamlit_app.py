@@ -303,6 +303,8 @@ if st.session_state.page == "admin":
     adf = pd.DataFrame(records)
     if "submitted_at" in adf.columns:
         adf = adf.sort_values("submitted_at", ascending=False)
+    # Display only: show recipient_* columns as client_* (request_url stays for deletion).
+    adf = adf.rename(columns=lambda c: "client_" + c[10:] if c.startswith("recipient_") else c)
 
     gb = GridOptionsBuilder.from_dataframe(adf)
     gb.configure_default_column(editable=False, sortable=True, filter=False, resizable=True)
@@ -374,6 +376,8 @@ if st.session_state.page == "landing":
     # Drop the workbook LINK (shared-drive, data-team only — requester may lack
     # access). Keep request_file (just a name) so the requester can trace their request.
     df = df.drop(columns=["request_url"], errors="ignore")
+    # Display only: show recipient_* columns as client_* (stored data stays recipient_*).
+    df = df.rename(columns=lambda c: "client_" + c[10:] if c.startswith("recipient_") else c)
 
     # --- AG Grid: native pagination, page-size selector, sort/filter/resize ---
     gb = GridOptionsBuilder.from_dataframe(df)
