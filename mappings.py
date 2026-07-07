@@ -234,7 +234,8 @@ def to_template_values(a):
     v["recipient_type"] = a.get("recipient_type") or ""
     v["target_count"] = _num(a.get("target_count"))
     v["fresh"] = "Yes" if a.get("exclude_previously_sent") else "No"
-    v["ntc_allowed"] = "Yes" if a.get("allow_ntc") else "No"
+    # NTC is admitted when the requester gives the NTC band a count.
+    v["ntc_allowed"] = "Yes" if (a.get("quotas") or {}).get("NTC") else "No"
 
     v["min_age"] = _num(a.get("min_age"))
     v["max_age"] = _num(a.get("max_age"))
@@ -274,13 +275,13 @@ def validate_submission(a):
     """Return a list of human-readable errors (empty = valid)."""
     errs = []
     if not (a.get("recipient_name") or "").strip():
-        errs.append("Recipient name is required.")
+        errs.append("Client name is required.")
     if a.get("recipient_type") not in RECIPIENT_TYPES:
-        errs.append("Select a recipient type.")
+        errs.append("Select a client type.")
     if not valid_mobile(a.get("recipient_contact")):
-        errs.append("Recipient contact must be a 10-digit Indian mobile (starts 6-9).")
+        errs.append("Client contact must be a 10-digit Indian mobile (starts 6-9).")
     if not valid_email(a.get("recipient_email")):
-        errs.append("Recipient email looks invalid.")
+        errs.append("Client email looks invalid.")
     pan = (a.get("recipient_pan") or "").strip()
     gst = (a.get("recipient_gst") or "").strip()
     if not pan and not gst:
@@ -295,8 +296,8 @@ def validate_submission(a):
             errs.append("GST does not embed the given PAN (GSTIN characters 3-12).")
 
     tc = a.get("target_count")
-    if not tc or tc <= 0:
-        errs.append("Target count must be a positive number.")
+    if not tc or tc < 10000:
+        errs.append("Target count must be at least 10,000.")
 
     mn, mx = a.get("min_age"), a.get("max_age")
     if mn and mx and mn > mx:
@@ -368,11 +369,11 @@ if __name__ == "__main__":
         "recipient_name": "Fast Credit Pvt Ltd", "recipient_type": "NBFC",
         "recipient_contact": "9876543210", "recipient_email": "a@b.com",
         "recipient_pan": "ABCDE1234F", "recipient_gst": "27ABCDE1234F1Z5",
-        "target_count": 15000, "exclude_previously_sent": True, "allow_ntc": True,
+        "target_count": 15000, "exclude_previously_sent": True,
         "min_age": 23, "max_age": 55, "min_salary_monthly": 50000,
         "employment_type": "Salaried",
-        "score_bands": ["750-799", "800+"],
-        "quotas": {"750-799": 8000, "800+": 7000},
+        "score_bands": ["750-799", "800+", "NTC"],
+        "quotas": {"750-799": 7000, "800+": 7000, "NTC": 1000},
         "products_include": ["Personal Loan", "Credit Card"],
         "lenders_exclude": ["Housing Finance Co"],
         "credit_conduct": "Strict", "pan_required": True,
@@ -383,7 +384,7 @@ if __name__ == "__main__":
     assert tv["fresh"] == "Yes" and tv["ntc_allowed"] == "Yes"
     assert tv["enq_include_purpose_codes"] == "13,7"
     assert tv["enq_exclude_member_classes"] == "HFC"
-    assert tv["bucket_750_799_quota"] == "8000" and tv["bucket_800_plus_quota"] == "7000"
+    assert tv["bucket_750_799_quota"] == "7000" and tv["bucket_ntc_quota"] == "1000"
     assert tv["exclude_writeoff"] == "Yes" and tv["max_dpd_90"] == "0"
     assert tv["max_enq_amount"] == str(AMOUNT_CAP)   # clamped to 1cr
     # quota mismatch is caught

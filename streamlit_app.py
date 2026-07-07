@@ -416,13 +416,13 @@ with st.expander("📄 Sample of the data you'll receive"):
         hide_index=True, use_container_width=True,
     )
 
-st.subheader("1 · Recipient")
+st.subheader("1 · Client")
 c1, c2 = st.columns(2)
-recipient_name = c1.text_input("Recipient name \\*", key=f"recipient_name_{V}")
+recipient_name = c1.text_input("Client name \\*", key=f"recipient_name_{V}")
 if not recipient_name.strip():
     c1.markdown(":orange[Required]")
 recipient_type = c2.selectbox(
-    "Recipient type \\*", mappings.RECIPIENT_TYPES, index=None, placeholder="Select…",
+    "Client type \\*", mappings.RECIPIENT_TYPES, index=None, placeholder="Select…",
     key=f"recipient_type_{V}",
 )
 if not recipient_type:
@@ -456,12 +456,11 @@ elif _gst_ok and _pan_ok and not mappings.gstin_pan_match(recipient_gst, recipie
 
 st.subheader("2 · Campaign")
 target_count = st.number_input(
-    "How many leads do you need? (target count) \\*", min_value=1, step=1000, value=None,
-    key=f"target_count_{V}",
+    "How many leads do you need? (target count — minimum 10,000) \\*",
+    min_value=10000, step=1000, value=None, key=f"target_count_{V}",
 )
 if not target_count:
-    st.markdown(":orange[Required]")
-allow_ntc = st.checkbox("Allow new-to-credit (no bureau score)", value=True, key=f"allow_ntc_{V}")
+    st.markdown(":orange[Required — minimum 10,000]")
 
 st.subheader("3 · Demographics")
 c9, c10, c11 = st.columns(3)
@@ -480,6 +479,8 @@ score_bands = st.multiselect(
     help="Pick the bands, then set how many leads from each — they must add up to the target count.",
     key=f"score_bands_{V}",
 )
+st.caption("New-to-credit (NTC) has no bureau score. To include NTC leads, add the ‘NTC’ band and "
+           "give it a count — it counts toward your total like any other band.")
 quotas = {}
 if score_bands:
     st.caption("Leads per band (must total the target count):")
@@ -570,7 +571,6 @@ if st.session_state.submit_running:
         "recipient_pan": recipient_pan,
         "recipient_gst": recipient_gst,
         "target_count": _i(target_count),
-        "allow_ntc": allow_ntc,
         "min_age": _i(min_age),
         "max_age": _i(max_age),
         "min_salary_monthly": _i(min_salary),
