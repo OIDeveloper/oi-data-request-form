@@ -19,24 +19,9 @@ st.set_page_config(
     layout="wide",
 )
 
-# Global CSS: hide header anchor icons; show the collapsed-sidebar toggle as a
-# hamburger (☰) on all devices for a mobile-style menu.
+# Hide the auto-generated anchor-link icon that Streamlit adds to every header.
 st.markdown(
-    """
-    <style>
-    [data-testid='stHeaderActionElements'] { display: none; }
-    [data-testid='stSidebarCollapsedControl'] button span,
-    [data-testid='stSidebarCollapsedControl'] button svg,
-    [data-testid='collapsedControl'] button span,
-    [data-testid='collapsedControl'] button svg { display: none !important; }
-    [data-testid='stSidebarCollapsedControl'] button::before,
-    [data-testid='collapsedControl'] button::before {
-        content: '☰';
-        font-size: 24px;
-        line-height: 1;
-    }
-    </style>
-    """,
+    "<style>[data-testid='stHeaderActionElements']{display:none;}</style>",
     unsafe_allow_html=True,
 )
 
@@ -394,27 +379,25 @@ if st.session_state.page == "landing":
     # Display only: show recipient_* columns as client_* (stored data stays recipient_*).
     df = df.rename(columns=lambda c: "client_" + c[10:] if c.startswith("recipient_") else c)
 
-    # --- Card layout (mobile-first): one card per request ---
-    st.caption(f"{len(df)} request(s), newest first.")
-    MAX_CARDS = 50
-    skip = {"client_name", "submitted_at", "client_type", "requested_by"}
-    for _, row in df.head(MAX_CARDS).iterrows():
-        with st.container(border=True):
-            title = str(row.get("client_name") or row.get("request_file") or "Request").strip()
-            st.markdown(f"**{title}**")
-            meta = [str(row.get(k, "")).strip() for k in ("submitted_at", "client_type")]
-            meta = [m for m in meta if m]
-            if meta:
-                st.caption(" · ".join(meta))
-            details = [
-                f"- **{c.replace('_', ' ')}:** {row[c]}"
-                for c in df.columns
-                if c not in skip and str(row[c]).strip()
-            ]
-            if details:
-                st.markdown("\n".join(details))
-    if len(df) > MAX_CARDS:
-        st.caption(f"Showing the newest {MAX_CARDS} of {len(df)}.")
+    # --- AG Grid: native pagination, page-size selector, sort/filter/resize ---
+    gb = GridOptionsBuilder.from_dataframe(df)
+    gb.configure_default_column(editable=False, sortable=True, filter=False, resizable=True)
+    gb.configure_pagination(
+        enabled=True, paginationAutoPageSize=False, paginationPageSize=10
+    )
+    grid_options = gb.build()
+    grid_options["paginationPageSizeSelector"] = [10, 25, 50]
+    grid_options["autoSizeStrategy"] = {"type": "fitCellContents"}
+
+    AgGrid(
+        df,
+        gridOptions=grid_options,
+        theme="alpine",
+        height=470,
+        allow_unsafe_jscode=True,
+        fit_columns_on_grid_load=False,
+        enable_enterprise_modules=False,
+    )
     st.stop()
 
 # ── Form ─────────────────────────────────────────────────────────────────────
