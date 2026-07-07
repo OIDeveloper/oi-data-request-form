@@ -149,6 +149,10 @@ if st.session_state.page == "users":
         st.session_state.udel_running = False
     if "uconfirm_ver" not in st.session_state:
         st.session_state.uconfirm_ver = 0
+    if "add_running" not in st.session_state:
+        st.session_state.add_running = False
+    if "adduser_ver" not in st.session_state:
+        st.session_state.adduser_ver = 0
 
     # Process a pending removal (disabled button + spinner = no double-click).
     if st.session_state.udel_running:
@@ -169,21 +173,33 @@ if st.session_state.page == "users":
         f"{BOOTSTRAP_ADMIN} is always an admin and cannot be removed."
     )
 
+    av = st.session_state.adduser_ver
     with st.container(border=True):
         st.subheader("Add a user", anchor=False)
         ac1, ac2, ac3 = st.columns([3, 1, 1])
-        new_email = ac1.text_input("Email", placeholder="name@oneinfinity.in", key="new_user_email")
-        new_admin = ac2.checkbox("Admin", value=False, key="new_user_admin")
-        if ac3.button("Add / update", type="primary"):
+        new_email = ac1.text_input(
+            "Email", placeholder="name@oneinfinity.in", key=f"new_user_email_{av}"
+        )
+        new_admin = ac2.checkbox("Admin", value=False, key=f"new_user_admin_{av}")
+        if ac3.button("Add / update", type="primary", disabled=st.session_state.add_running):
             e = (new_email or "").strip().lower()
             if not mappings.valid_email(e):
                 st.error("Enter a valid email address.")
             else:
-                with st.spinner("Saving…"):
-                    storage.add_app_user(e, new_admin, user_email, mappings.ist_timestamp())
-                _user_records.clear()
-                st.session_state.user_msg = f"Saved {e}."
+                st.session_state.add_running = True
+                st.session_state.pending_add = (e, new_admin)
                 st.rerun()
+
+    if st.session_state.add_running:
+        e_add, a_add = st.session_state.get("pending_add", ("", False))
+        with st.spinner("Saving user…"):
+            storage.add_app_user(e_add, a_add, user_email, mappings.ist_timestamp())
+        st.session_state.add_running = False
+        st.session_state.pop("pending_add", None)
+        st.session_state.adduser_ver += 1      # clears the add-user inputs
+        _user_records.clear()
+        st.session_state.user_msg = f"Saved {e_add}."
+        st.rerun()
 
     try:
         urecs = storage.get_or_seed_app_users(_secrets_allowlist(), BOOTSTRAP_ADMIN)
